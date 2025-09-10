@@ -5,6 +5,13 @@
 ![GitHub License](https://img.shields.io/github/license/fini-net/datadog-service-analyzer)
 ![GitHub watchers](https://img.shields.io/github/watchers/fini-net/datadog-service-analyzer)
 
+Which services in datadog are missing from service catalog?
+
+## Status
+
+This is only at the **idea** stage.  We'll see how life goes and whether
+I get the time to actually implement this.
+
 ## What This Does
 
 Ever wonder if you've got services sending telemetry to Datadog that somehow
@@ -39,7 +46,7 @@ Run `just` to see available commands, or check out the
 [development process](.github/CONTRIBUTING.md#development-process) for the full
 workflow.
 
-## Contributing
+## Contributing Links
 
 - [Code of Conduct](.github/CODE_OF_CONDUCT.md)
 - [Contributing Guide](.github/CONTRIBUTING.md) includes a step-by-step guide to our
