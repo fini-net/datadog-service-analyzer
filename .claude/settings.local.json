@@ -3,7 +3,8 @@
     "allow": [
       "Bash(markdownlint-cli2:*)",
       "Bash(./datadog-service-analyzer.sh:*)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "Bash(./service-team-mapper.sh:*)"
     ],
     "deny": [],
     "ask": []
