@@ -88,7 +88,7 @@ OPTIONS:
     --days DAYS            Days of telemetry data to analyze [default: 7]
 ```
 
-### Examples
+### Service Analyzer Examples
 
 ```bash
 # Analyze last 14 days with JSON output
@@ -104,7 +104,25 @@ OPTIONS:
 ./datadog-service-analyzer.sh --verbose
 ```
 
+### Team Mapper Examples
+
+```bash
+# Generate team mappings in JSON format (default)
+./service-team-mapper.sh
+
+# Table format for human reading
+./service-team-mapper.sh --output table
+
+# CSV format for spreadsheet import
+./service-team-mapper.sh --output csv
+
+# Use custom 1Password credentials
+./service-team-mapper.sh --op-vault production --op-item datadog-prod
+```
+
 ### Sample Output
+
+#### Service Analyzer
 
 **Table format (default):**
 
@@ -140,13 +158,74 @@ Missing services:
 }
 ```
 
-## Features
+#### Team Mapper
+
+**JSON format (default):**
+
+```json
+{
+  "summary": {
+    "total_services": 25,
+    "services_with_teams": 18,
+    "services_with_org_units": 12
+  },
+  "services": [
+    {
+      "service": "payment-api",
+      "team": "payments-team",
+      "org_unit": "commerce",
+      "description": "Handles payment processing",
+      "links": [{"name": "repo", "url": "github.com/company/payment-api"}]
+    },
+    {
+      "service": "user-service",
+      "team": "identity-team",
+      "org_unit": "platform",
+      "description": "User management and authentication",
+      "links": []
+    }
+  ]
+}
+```
+
+**Table format:**
+
+```text
+=== Service Team Mappings ===
+
+SERVICE                        TEAM                 ORG_UNIT        DESCRIPTION
+------------------------------ -------------------- --------------- ------------------------------
+payment-api                    payments-team        commerce        Handles payment processing
+user-service                   identity-team        platform        User management and auth...
+legacy-system                  N/A                  N/A             Legacy monolith service
+```
+
+## Available Scripts
+
+### datadog-service-analyzer.sh
+
+Analyzes Datadog telemetry to find services missing from service catalog.
+
+**Features:**
 
 - **Multi-signal Analysis**: Discovers services from metrics, APM traces, and logs
+- **Service Catalog Cross-reference**: Compares discovered services against your service catalog
+- **Configurable Time Range**: Analyze telemetry data from the last N days
+
+### service-team-mapper.sh
+
+Generates a list of services mapped to teams from the Datadog service catalog.
+
+**Features:**
+
+- **Team Mapping**: Extracts team contact information from service definitions
+- **Organizational Structure**: Includes `org_unit` tags when present in service catalog
+- **Service Metadata**: Includes descriptions and links for each service
+
+## Common Features
+
 - **1Password Integration**: Securely retrieves API credentials from 1Password
 - **Flexible Output**: Supports table, JSON, and CSV output formats
-- **Configurable Time Range**: Analyze telemetry data from the last N days
-- **Service Catalog Cross-reference**: Compares discovered services against your service catalog
 - **Error Handling**: Robust error checking and informative error messages
 - **ShellCheck Compliant**: Follows bash best practices
 
