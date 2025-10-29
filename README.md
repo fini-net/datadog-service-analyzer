@@ -240,7 +240,7 @@ workflow.
 
 - [Code of Conduct](.github/CODE_OF_CONDUCT.md)
 - [Contributing Guide](.github/CONTRIBUTING.md) includes a step-by-step guide to our
-  [development processs](.github/CONTRIBUTING.md#development-process).
+  [development process](.github/CONTRIBUTING.md#development-process).
 
 ## Support & Security
 
