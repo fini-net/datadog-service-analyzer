@@ -1,0 +1,15 @@
+# .repo.toml
+
+[about]
+description = "Which services in datadog are missing from service catalog?"
+topics = ["datadog", "datadog-service-catalog", "service-management", "services"]
+
+[urls]
+git_ssh = "git@github.com:fini-net/datadog-service-analyzer.git"
+web_url = "https://github.com/fini-net/datadog-service-analyzer"
+
+[flags]
+claude = true
+claude-review = true
+copilot-review = true
+standard-release = true
