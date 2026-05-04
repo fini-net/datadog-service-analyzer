@@ -6,7 +6,12 @@
       "Bash(bash datadog-service-analyzer.sh)",
       "Bash(just claude_review *)",
       "Bash(markdownlint-cli2:*)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "WebFetch(domain:api.datadoghq.com)",
+      "WebFetch(domain:datadoghq.dev)",
+      "WebFetch(domain:developer.datadoghq.com)",
+      "WebFetch(domain:docs.datadoghq.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []
