@@ -258,45 +258,58 @@ get_service_catalog() {
 
     log_info "Retrieving service catalog (paginated)"
 
-    local page_size=100
+    local page_size=200
     local page_offset=0
     local all_services=""
+    local unique_before=0
 
     while true; do
         local catalog_response
         catalog_response=$(make_datadog_request \
-            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Boffset%5D=$page_offset" \
+            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Boffset%5D=$page_offset&schema_version=v2.1" \
             "$api_key" "$app_key" "$site")
 
         if [[ -z "$catalog_response" ]]; then
             break
         fi
 
-        local page_services
-        page_services=$(echo "$catalog_response" | jq -r '.data[]? | .attributes.schema."dd-service" // .attributes.schema.info.["dd-service"] // empty' 2>/dev/null)
+        local data_count
+        data_count=$(echo "$catalog_response" | jq '.data | length' 2>/dev/null || echo "0")
 
-        if [[ -z "$page_services" ]]; then
+        if [[ "$data_count" -eq 0 ]]; then
             break
         fi
 
-        if [[ -n "$all_services" ]]; then
-            all_services="$all_services"$'\n'"$page_services"
-        else
-            all_services="$page_services"
+        local page_services
+        page_services=$(echo "$catalog_response" | jq -r '.data[]? | .attributes.schema."dd-service" // .attributes.schema.info["dd-service"] // empty' 2>/dev/null)
+
+        if [[ -n "$page_services" ]]; then
+            if [[ -n "$all_services" ]]; then
+                all_services="$all_services"$'\n'"$page_services"
+            else
+                all_services="$page_services"
+            fi
         fi
 
-        local count
-        count=$(echo "$page_services" | wc -l | tr -d ' ')
-        if [[ "$count" -lt "$page_size" ]]; then
+        local unique_now
+        unique_now=$(echo "$all_services" | sort -u | grep -c -v '^$' || true)
+
+        if [[ "$unique_now" -eq "$unique_before" ]]; then
+            log_info "No new services found on this page, stopping pagination"
+            break
+        fi
+        unique_before=$unique_now
+
+        if [[ "$data_count" -lt "$page_size" ]]; then
             break
         fi
 
         page_offset=$((page_offset + page_size))
-        log_info "Fetched $page_offset catalog entries so far..."
+        log_info "Fetched $page_offset catalog entries so far (${unique_now} unique services)..."
     done
 
     if [[ -n "$all_services" ]]; then
-        echo "$all_services" | sort -u
+        echo "$all_services" | sort -u | grep -v '^$'
     fi
 }
 
