@@ -249,6 +249,7 @@ get_service_catalog() {
     local page_size=200
     local page_offset=0
     local all_services=""
+    local unique_before=0
 
     while true; do
         local catalog_response
@@ -278,14 +279,22 @@ get_service_catalog() {
             fi
         fi
 
+        local unique_now
+        unique_now=$(echo "$all_services" | sort -u | grep -c -v '^$' || true)
+
+        # DD catalog API returns full pages of repeated data past the end instead of short/empty pages
+        if [[ "$unique_now" -eq "$unique_before" ]]; then
+            log_info "No new services found on this page, stopping pagination"
+            break
+        fi
+        unique_before=$unique_now
+
         if [[ "$data_count" -lt "$page_size" ]]; then
             break
         fi
 
         page_offset=$((page_offset + page_size))
-        local unique_count
-        unique_count=$(echo "$all_services" | sort -u | grep -c -v '^$' || true)
-        log_info "Fetched $page_offset catalog entries so far (${unique_count} unique services)..."
+        log_info "Fetched $page_offset catalog entries so far (${unique_now} unique services)..."
     done
 
     if [[ -n "$all_services" ]]; then
