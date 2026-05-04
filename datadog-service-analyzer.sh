@@ -302,13 +302,20 @@ get_service_catalog() {
     fi
 }
 
+normalize_service_names() {
+    sed -E 's/(-[0-9a-fA-F]{6,}){1,2}$//' | sort -u | grep -v '^$'
+}
+
 find_missing_services() {
     local telemetry_services="$1"
     local catalog_services="$2"
-    
+
     log_info "Analyzing service gaps..."
-    
-    comm -23 <(echo "$telemetry_services" | sort) <(echo "$catalog_services" | sort)
+
+    local normalized_telemetry
+    normalized_telemetry=$(echo "$telemetry_services" | normalize_service_names)
+
+    comm -23 <(echo "$normalized_telemetry" | sort) <(echo "$catalog_services" | sort)
 }
 
 format_output() {
@@ -421,15 +428,18 @@ main() {
     
     local telemetry_services
     telemetry_services=$(get_services_from_telemetry "$api_key" "$app_key" "$site" "$days")
-    
+
+    local normalized_telemetry
+    normalized_telemetry=$(echo "$telemetry_services" | normalize_service_names)
+
     local catalog_services
     catalog_services=$(get_service_catalog "$api_key" "$app_key" "$site")
-    
+
     local missing_services
     missing_services=$(find_missing_services "$telemetry_services" "$catalog_services")
-    
+
     local total_telemetry
-    total_telemetry=$(count_lines "$telemetry_services")
+    total_telemetry=$(count_lines "$normalized_telemetry")
 
     local total_catalog
     total_catalog=$(count_lines "$catalog_services")
