@@ -246,15 +246,15 @@ get_service_catalog() {
 
     log_info "Retrieving service catalog (paginated)"
 
-    local page_size=200
-    local page_offset=0
+    local page_size=100
+    local page_number=0
     local all_services=""
     local unique_before=0
 
     while true; do
         local catalog_response
         catalog_response=$(make_datadog_request \
-            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Boffset%5D=$page_offset&schema_version=v2.1" \
+            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Bnumber%5D=$page_number&schema_version=v2.1" \
             "$api_key" "$app_key" "$site")
 
         if [[ -z "$catalog_response" ]]; then
@@ -293,8 +293,8 @@ get_service_catalog() {
             break
         fi
 
-        page_offset=$((page_offset + 1))
-        log_info "Fetched $page_offset catalog entries so far (${unique_now} unique services)..."
+        page_number=$((page_number + 1))
+        log_info "Fetched page $page_number (${unique_now} unique services so far)..."
     done
 
     if [[ -n "$all_services" ]]; then
