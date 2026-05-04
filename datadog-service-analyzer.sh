@@ -27,6 +27,18 @@ log_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
 }
 
+url_encode() {
+    printf '%s' "$1" | jq -sRr @uri
+}
+
+count_lines() {
+    if [[ -z "$1" ]]; then
+        echo "0"
+    else
+        echo "$1" | wc -l | tr -d ' '
+    fi
+}
+
 usage() {
     cat << EOF
 Usage: $SCRIPT_NAME [OPTIONS]
@@ -137,14 +149,23 @@ make_datadog_request() {
     local api_key="$2"
     local app_key="$3"
     local site="$4"
-    
-    local url="https://api.${site}/api/v1${endpoint}"
-    
-    curl -s \
-        -H "DD-API-KEY: $api_key" \
-        -H "DD-APPLICATION-KEY: $app_key" \
-        -H "Content-Type: application/json" \
-        "$url"
+    local method="${5:-GET}"
+    local body="${6:-}"
+
+    local url="https://api.${site}${endpoint}"
+
+    local -a curl_args=(-s
+        -H "DD-API-KEY: $api_key"
+        -H "DD-APPLICATION-KEY: $app_key"
+        -H "Content-Type: application/json"
+        -X "$method"
+    )
+
+    if [[ -n "$body" ]]; then
+        curl_args+=(-d "$body")
+    fi
+
+    curl "${curl_args[@]}" "$url"
 }
 
 get_services_from_telemetry() {
@@ -152,62 +173,79 @@ get_services_from_telemetry() {
     local app_key="$2"
     local site="$3"
     local days="$4"
-    
+
     log_info "Discovering services from telemetry data (last $days days)"
-    
+
     local end_time
     end_time=$(date +%s)
     local start_time=$((end_time - (days * 86400)))
-    
+
     local services=()
-    
-    log_info "Checking metrics for service names..."
+
+    log_info "Checking APM traces for service names..."
+    local apm_env="*"
+    local apm_response
+    apm_response=$(make_datadog_request \
+        "/api/v1/service_dependencies?start=$start_time&end=$end_time&env=$apm_env" \
+        "$api_key" "$app_key" "$site")
+
+    if [[ -n "$apm_response" ]]; then
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && services+=("$line")
+        done < <(echo "$apm_response" | jq -r 'keys[]?' 2>/dev/null | sort -u)
+    fi
+
+    log_info "Checking metrics for service tags..."
     local metrics_response
     metrics_response=$(make_datadog_request \
-        "/query?query=*&from=$start_time&to=$end_time" \
+        "/api/v1/tags/hosts" \
         "$api_key" "$app_key" "$site")
-    
+
     if [[ -n "$metrics_response" ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] && services+=("$line")
         done < <(echo "$metrics_response" | jq -r '
-            .series[]? |
-            select(.metric | test("service:")) |
-            .tags[]? |
-            select(test("^service:")) |
-            sub("^service:"; "")' 2>/dev/null | sort -u)
+            .tags | to_entries[]? |
+            select(.key | startswith("service:")) |
+            .key | sub("^service:"; "")' 2>/dev/null | sort -u)
     fi
-    
-    log_info "Checking APM traces for service names..."
-    local apm_response
-    apm_response=$(make_datadog_request \
-        "/apm/services?start=$start_time&end=$end_time" \
+
+    log_info "Searching metrics with service tag facets..."
+    local search_response
+    search_response=$(make_datadog_request \
+        "/api/v1/search?q=service:" \
         "$api_key" "$app_key" "$site")
-    
-    if [[ -n "$apm_response" ]]; then
+
+    if [[ -n "$search_response" ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] && services+=("$line")
-        done < <(echo "$apm_response" | jq -r '
-            .[]? | select(.name) | .name' 2>/dev/null | sort -u)
+        done < <(echo "$search_response" | jq -r '
+            .results.tag_values[]?' 2>/dev/null | sort -u)
     fi
-    
+
     log_info "Checking logs for service names..."
-    local logs_query="*"
+    local logs_body
+    logs_body=$(jq -n \
+        --arg from "${start_time}000" \
+        --arg to "${end_time}000" \
+        '{
+            filter: { query: "*", from: $from, to: $to },
+            group_by: [{ facet: "service", limit: 10000 }],
+            compute: [{ aggregation: "count" }]
+        }')
     local logs_response
     logs_response=$(make_datadog_request \
-        "/logs-queries/list?query=$logs_query&time.from=${start_time}000&time.to=${end_time}000&limit=1000" \
-        "$api_key" "$app_key" "$site")
-    
+        "/api/v2/logs/analytics/aggregate" \
+        "$api_key" "$app_key" "$site" "POST" "$logs_body")
+
     if [[ -n "$logs_response" ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] && services+=("$line")
         done < <(echo "$logs_response" | jq -r '
-            .logs[]? |
-            .attributes.tags[]? |
-            select(test("^service:")) |
-            sub("^service:"; "")' 2>/dev/null | sort -u)
+            .data.buckets[]? |
+            .by.service // empty' 2>/dev/null | sort -u)
     fi
-    
+
     if [[ ${#services[@]} -gt 0 ]]; then
         printf '%s\n' "${services[@]}" | sort -u | grep -v '^$' || true
     fi
@@ -217,16 +255,48 @@ get_service_catalog() {
     local api_key="$1"
     local app_key="$2"
     local site="$3"
-    
-    log_info "Retrieving service catalog"
-    
-    local catalog_response
-    catalog_response=$(make_datadog_request \
-        "/service-definitions" \
-        "$api_key" "$app_key" "$site")
-    
-    if [[ -n "$catalog_response" ]]; then
-        echo "$catalog_response" | jq -r '.data[]? | .attributes.service' 2>/dev/null | sort -u
+
+    log_info "Retrieving service catalog (paginated)"
+
+    local page_size=100
+    local page_offset=0
+    local all_services=""
+
+    while true; do
+        local catalog_response
+        catalog_response=$(make_datadog_request \
+            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Boffset%5D=$page_offset" \
+            "$api_key" "$app_key" "$site")
+
+        if [[ -z "$catalog_response" ]]; then
+            break
+        fi
+
+        local page_services
+        page_services=$(echo "$catalog_response" | jq -r '.data[]? | .attributes.schema."dd-service" // .attributes.schema.info.["dd-service"] // empty' 2>/dev/null)
+
+        if [[ -z "$page_services" ]]; then
+            break
+        fi
+
+        if [[ -n "$all_services" ]]; then
+            all_services="$all_services"$'\n'"$page_services"
+        else
+            all_services="$page_services"
+        fi
+
+        local count
+        count=$(echo "$page_services" | wc -l | tr -d ' ')
+        if [[ "$count" -lt "$page_size" ]]; then
+            break
+        fi
+
+        page_offset=$((page_offset + page_size))
+        log_info "Fetched $page_offset catalog entries so far..."
+    done
+
+    if [[ -n "$all_services" ]]; then
+        echo "$all_services" | sort -u
     fi
 }
 
@@ -245,6 +315,9 @@ format_output() {
     local total_telemetry="$3"
     local total_catalog="$4"
     
+    local total_missing
+    total_missing=$(count_lines "$missing_services")
+
     case "$format" in
         json)
             cat << EOF
@@ -252,7 +325,7 @@ format_output() {
   "summary": {
     "services_in_telemetry": $total_telemetry,
     "services_in_catalog": $total_catalog,
-    "missing_from_catalog": $(echo "$missing_services" | wc -l | tr -d ' ')
+    "missing_from_catalog": $total_missing
   },
   "missing_services": [
 $(echo "$missing_services" | sed 's/^/    "/' | sed 's/$/"/' | sed '$!s/$/,/')
@@ -272,7 +345,7 @@ EOF
             echo
             echo "Services found in telemetry: $total_telemetry"
             echo "Services in service catalog: $total_catalog"
-            echo "Services missing from catalog: $(echo "$missing_services" | wc -l | tr -d ' ')"
+            echo "Services missing from catalog: $total_missing"
             echo
             if [[ -n "$missing_services" ]]; then
                 echo "Missing services:"
@@ -354,10 +427,10 @@ main() {
     missing_services=$(find_missing_services "$telemetry_services" "$catalog_services")
     
     local total_telemetry
-    total_telemetry=$(echo "$telemetry_services" | wc -l | tr -d ' ')
-    
+    total_telemetry=$(count_lines "$telemetry_services")
+
     local total_catalog
-    total_catalog=$(echo "$catalog_services" | wc -l | tr -d ' ')
+    total_catalog=$(count_lines "$catalog_services")
     
     format_output "$output_format" "$missing_services" "$total_telemetry" "$total_catalog"
     
