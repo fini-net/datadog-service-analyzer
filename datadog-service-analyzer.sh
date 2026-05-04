@@ -41,29 +41,36 @@ OPTIONS:
     --op-item ITEM         1Password item name [default: datadog-api]
     --days DAYS            Days of telemetry data to analyze [default: 7]
 
+ENVIRONMENT VARIABLES:
+    DD_API_KEY              Datadog API key (overrides 1Password)
+    DD_APP_KEY              Datadog application key (overrides 1Password)
+    DD_SITE                 Datadog site [default: datadoghq.com]
+
 EXAMPLES:
     $SCRIPT_NAME
     $SCRIPT_NAME --output json --days 14
     $SCRIPT_NAME --op-vault production --op-item datadog-prod
+    DD_API_KEY=xxx DD_APP_KEY=yyy $SCRIPT_NAME
 
 EOF
 }
 
 check_dependencies() {
+    local need_op="$1"
     local missing_deps=()
-    
-    if ! command -v op &> /dev/null; then
+
+    if [[ "$need_op" == "true" ]] && ! command -v op &> /dev/null; then
         missing_deps+=("1Password CLI (op)")
     fi
-    
+
     if ! command -v curl &> /dev/null; then
         missing_deps+=("curl")
     fi
-    
+
     if ! command -v jq &> /dev/null; then
         missing_deps+=("jq")
     fi
-    
+
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         log_error "Missing required dependencies:"
         printf '  - %s\n' "${missing_deps[@]}" >&2
@@ -71,34 +78,55 @@ check_dependencies() {
     fi
 }
 
+get_credentials_from_env() {
+    { local restore_trace=false; [[ $- == *x* ]] && restore_trace=true; set +x; } 2>/dev/null
+    if [[ -n "${DD_API_KEY:-}" && -n "${DD_APP_KEY:-}" ]]; then
+        if [[ "${DD_API_KEY}" == *"|"* || "${DD_APP_KEY}" == *"|"* ]]; then
+            log_error "DD_API_KEY and DD_APP_KEY must not contain '|'"
+            exit 1
+        fi
+        local site="${DD_SITE:-datadoghq.com}"
+        log_info "Using credentials from environment variables"
+        echo "${DD_API_KEY}|${DD_APP_KEY}|${site}"
+        { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
+        return 0
+    elif [[ -n "${DD_API_KEY:-}" || -n "${DD_APP_KEY:-}" ]]; then
+        log_warn "Only one of DD_API_KEY/DD_APP_KEY is set — both required to skip 1Password. Falling back to 1Password."
+    fi
+    { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
+    return 1
+}
+
 get_credentials_from_1password() {
+    { local restore_trace=false; [[ $- == *x* ]] && restore_trace=true; set +x; } 2>/dev/null
     local vault="${1:-datadog}"
     local item="${2:-datadog-api}"
-    
+
     log_info "Retrieving credentials from 1Password vault: $vault, item: $item"
-    
+
     if ! op vault get "$vault" &>/dev/null; then
         log_error "Cannot access 1Password vault: $vault"
         exit 1
     fi
-    
+
     local api_key
     local app_key
     local site
-    
+
     api_key=$(op item get "$item" --vault "$vault" --field "api_key" 2>/dev/null || {
         log_error "Failed to retrieve api_key from 1Password"
         exit 1
     })
-    
+
     app_key=$(op item get "$item" --vault "$vault" --field "app_key" 2>/dev/null || {
         log_error "Failed to retrieve app_key from 1Password"
         exit 1
     })
-    
+
     site=$(op item get "$item" --vault "$vault" --field "site" 2>/dev/null || echo "datadoghq.com")
-    
+
     echo "$api_key|$app_key|$site"
+    { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
 }
 
 make_datadog_request() {
@@ -295,13 +323,18 @@ main() {
     if [[ "$verbose" == "true" ]]; then
         set -x
     fi
-    
-    check_dependencies
-    
+
     local credentials
-    credentials=$(get_credentials_from_1password "$op_vault" "$op_item")
-    
+    if credentials=$(get_credentials_from_env); then
+        check_dependencies false
+    else
+        check_dependencies true
+        credentials=$(get_credentials_from_1password "$op_vault" "$op_item")
+    fi
+
+    { local _xt=false; [[ $- == *x* ]] && _xt=true; set +x; } 2>/dev/null
     IFS='|' read -r api_key app_key site <<< "$credentials"
+    { [[ "$_xt" == "true" ]] && set -x; } 2>/dev/null
     
     local telemetry_services
     telemetry_services=$(get_services_from_telemetry "$api_key" "$app_key" "$site" "$days")
