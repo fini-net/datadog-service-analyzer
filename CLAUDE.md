@@ -73,6 +73,16 @@ Both bash scripts follow this pattern:
 
 ### Credential management
 
+Credentials are resolved in order: environment variables first, then 1Password.
+
+**Environment variables** (standard Datadog names):
+
+- `DD_API_KEY` - Datadog API key
+- `DD_APP_KEY` - Datadog application key
+- `DD_SITE` - Datadog site (optional, defaults to `datadoghq.com`)
+
+**1Password fallback** (used when `DD_API_KEY`/`DD_APP_KEY` are not set):
+
 Scripts expect 1Password items with these fields:
 
 - `api_key` - Datadog API key
