@@ -136,9 +136,9 @@ make_datadog_request() {
     local api_key="$2"
     local app_key="$3"
     local site="$4"
-    
-    local url="https://api.${site}/api/v2${endpoint}"
-    
+
+    local url="https://api.${site}${endpoint}"
+
     curl -s \
         -H "DD-API-KEY: $api_key" \
         -H "DD-APPLICATION-KEY: $app_key" \
@@ -150,52 +150,68 @@ get_service_team_mappings() {
     local api_key="$1"
     local app_key="$2"
     local site="$3"
-    
-    log_info "Retrieving service catalog with team mappings"
-    
-    local catalog_response
-    catalog_response=$(make_datadog_request \
-        "/services/definitions" \
-        "$api_key" "$app_key" "$site")
-    
-    if [[ -z "$catalog_response" ]]; then
-        log_error "Failed to retrieve service catalog"
-        exit 1
-    fi
-    
-    echo "$catalog_response" | jq -r '
-        .data[]? |
-        {
-            service: .attributes.name,
-            team: (.attributes.contacts[]? | select(.type == "team") | .contact),
-            org_unit: (.attributes.tags[]? | select(startswith("org_unit:")) | sub("^org_unit:"; "")),
-            description: .attributes.description,
-            links: (.attributes.links[]? | {name: .name, url: .url})
-        } |
-        select(.service != null)
-    ' 2>/dev/null | jq -s '
-        map(
-            . as $service |
-            if .team then
-                {
-                    service: .service,
-                    team: .team,
-                    org_unit: (.org_unit // null),
-                    description: (.description // null),
-                    links: ([.links] | map(select(. != null)))
-                }
-            else
-                {
-                    service: .service,
-                    team: null,
-                    org_unit: (.org_unit // null),
-                    description: (.description // null),
-                    links: ([.links] | map(select(. != null)))
-                }
-            end
-        ) |
-        sort_by(.service)
-    '
+
+    log_info "Retrieving service catalog with team mappings (paginated)"
+
+    local page_size=100
+    local page_number=0
+    local all_json="[]"
+    local unique_before=0
+
+    while true; do
+        local catalog_response
+        catalog_response=$(make_datadog_request \
+            "/api/v2/services/definitions?page%5Bsize%5D=$page_size&page%5Bnumber%5D=$page_number&schema_version=v2.1" \
+            "$api_key" "$app_key" "$site")
+
+        if [[ -z "$catalog_response" ]]; then
+            break
+        fi
+
+        local data_count
+        data_count=$(echo "$catalog_response" | jq '.data | length' 2>/dev/null || echo "0")
+
+        if [[ "$data_count" -eq 0 ]]; then
+            break
+        fi
+
+        local page_json
+        page_json=$(echo "$catalog_response" | jq '
+            [.data[]? |
+            .attributes.schema as $schema |
+            {
+                service: ($schema."dd-service" // $schema.info["dd-service"] // null),
+                team: ($schema."dd-team" // $schema.info["dd-team"] // null),
+                org_unit: ([$schema.tags // [] | .[]? | select(startswith("org_unit:")) | sub("^org_unit:"; "")] | first // null),
+                description: ($schema.description // $schema.info.description // null),
+                links: ([$schema.links // [] | .[]? | {name: .name, url: .url}])
+            } |
+            select(.service != null)]
+        ' 2>/dev/null)
+
+        if [[ -n "$page_json" && "$page_json" != "[]" ]]; then
+            all_json=$(echo "$all_json"$'\n'"$page_json" | jq -s 'add | unique_by(.service)')
+        fi
+
+        local unique_now
+        unique_now=$(echo "$all_json" | jq 'length')
+
+        # DD catalog API returns full pages of repeated data past the end instead of short/empty pages
+        if [[ "$unique_now" -eq "$unique_before" ]]; then
+            log_info "No new services found on this page, stopping pagination"
+            break
+        fi
+        unique_before=$unique_now
+
+        if [[ "$data_count" -lt "$page_size" ]]; then
+            break
+        fi
+
+        page_number=$((page_number + 1))
+        log_info "Fetched page $page_number (${unique_now} unique services so far)..."
+    done
+
+    echo "$all_json" | jq 'sort_by(.service)'
 }
 
 format_output() {
