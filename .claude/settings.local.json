@@ -3,6 +3,7 @@
     "allow": [
       "Bash(./datadog-service-analyzer.sh:*)",
       "Bash(./service-team-mapper.sh:*)",
+      "Bash(just claude_review *)",
       "Bash(markdownlint-cli2:*)",
       "Bash(shellcheck:*)"
     ],
