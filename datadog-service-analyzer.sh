@@ -74,6 +74,9 @@ check_dependencies() {
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         log_error "Missing required dependencies:"
         printf '  - %s\n' "${missing_deps[@]}" >&2
+        if [[ "$need_op" == "true" ]]; then
+            log_info "Alternatively, set DD_API_KEY and DD_APP_KEY environment variables to skip 1Password"
+        fi
         exit 1
     fi
 }
@@ -165,13 +168,14 @@ get_services_from_telemetry() {
         "$api_key" "$app_key" "$site")
     
     if [[ -n "$metrics_response" ]]; then
-        readarray -t metric_services < <(echo "$metrics_response" | jq -r '
-            .series[]? | 
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && services+=("$line")
+        done < <(echo "$metrics_response" | jq -r '
+            .series[]? |
             select(.metric | test("service:")) |
-            .tags[]? | 
-            select(test("^service:")) | 
+            .tags[]? |
+            select(test("^service:")) |
             sub("^service:"; "")' 2>/dev/null | sort -u)
-        services+=("${metric_services[@]}")
     fi
     
     log_info "Checking APM traces for service names..."
@@ -181,9 +185,10 @@ get_services_from_telemetry() {
         "$api_key" "$app_key" "$site")
     
     if [[ -n "$apm_response" ]]; then
-        readarray -t apm_services < <(echo "$apm_response" | jq -r '
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && services+=("$line")
+        done < <(echo "$apm_response" | jq -r '
             .[]? | select(.name) | .name' 2>/dev/null | sort -u)
-        services+=("${apm_services[@]}")
     fi
     
     log_info "Checking logs for service names..."
@@ -194,15 +199,18 @@ get_services_from_telemetry() {
         "$api_key" "$app_key" "$site")
     
     if [[ -n "$logs_response" ]]; then
-        readarray -t log_services < <(echo "$logs_response" | jq -r '
-            .logs[]? | 
-            .attributes.tags[]? | 
-            select(test("^service:")) | 
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && services+=("$line")
+        done < <(echo "$logs_response" | jq -r '
+            .logs[]? |
+            .attributes.tags[]? |
+            select(test("^service:")) |
             sub("^service:"; "")' 2>/dev/null | sort -u)
-        services+=("${log_services[@]}")
     fi
     
-    printf '%s\n' "${services[@]}" | sort -u | grep -v '^$'
+    if [[ ${#services[@]} -gt 0 ]]; then
+        printf '%s\n' "${services[@]}" | sort -u | grep -v '^$' || true
+    fi
 }
 
 get_service_catalog() {
