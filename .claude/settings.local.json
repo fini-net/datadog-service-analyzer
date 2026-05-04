@@ -11,7 +11,8 @@
       "WebFetch(domain:datadoghq.dev)",
       "WebFetch(domain:developer.datadoghq.com)",
       "WebFetch(domain:docs.datadoghq.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []
