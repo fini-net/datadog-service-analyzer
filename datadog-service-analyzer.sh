@@ -27,10 +27,6 @@ log_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
 }
 
-url_encode() {
-    printf '%s' "$1" | jq -sRr @uri
-}
-
 count_lines() {
     if [[ -z "$1" ]]; then
         echo "0"
@@ -210,24 +206,16 @@ get_services_from_telemetry() {
             .key | sub("^service:"; "")' 2>/dev/null | sort -u)
     fi
 
-    log_info "Searching metrics with service tag facets..."
-    local search_response
-    search_response=$(make_datadog_request \
-        "/api/v1/search?q=service:" \
-        "$api_key" "$app_key" "$site")
-
-    if [[ -n "$search_response" ]]; then
-        while IFS= read -r line; do
-            [[ -n "$line" ]] && services+=("$line")
-        done < <(echo "$search_response" | jq -r '
-            .results.tag_values[]?' 2>/dev/null | sort -u)
-    fi
-
     log_info "Checking logs for service names..."
+    local from_iso to_iso
+    from_iso=$(date -u -d "@$start_time" '+%Y-%m-%dT%H:%M:%S.000Z' 2>/dev/null \
+        || date -u -r "$start_time" '+%Y-%m-%dT%H:%M:%S.000Z')
+    to_iso=$(date -u -d "@$end_time" '+%Y-%m-%dT%H:%M:%S.000Z' 2>/dev/null \
+        || date -u -r "$end_time" '+%Y-%m-%dT%H:%M:%S.000Z')
     local logs_body
     logs_body=$(jq -n \
-        --arg from "${start_time}000" \
-        --arg to "${end_time}000" \
+        --arg from "$from_iso" \
+        --arg to "$to_iso" \
         '{
             filter: { query: "*", from: $from, to: $to },
             group_by: [{ facet: "service", limit: 10000 }],
@@ -261,7 +249,6 @@ get_service_catalog() {
     local page_size=200
     local page_offset=0
     local all_services=""
-    local unique_before=0
 
     while true; do
         local catalog_response
@@ -291,21 +278,14 @@ get_service_catalog() {
             fi
         fi
 
-        local unique_now
-        unique_now=$(echo "$all_services" | sort -u | grep -c -v '^$' || true)
-
-        if [[ "$unique_now" -eq "$unique_before" ]]; then
-            log_info "No new services found on this page, stopping pagination"
-            break
-        fi
-        unique_before=$unique_now
-
         if [[ "$data_count" -lt "$page_size" ]]; then
             break
         fi
 
         page_offset=$((page_offset + page_size))
-        log_info "Fetched $page_offset catalog entries so far (${unique_now} unique services)..."
+        local unique_count
+        unique_count=$(echo "$all_services" | sort -u | grep -c -v '^$' || true)
+        log_info "Fetched $page_offset catalog entries so far (${unique_count} unique services)..."
     done
 
     if [[ -n "$all_services" ]]; then
