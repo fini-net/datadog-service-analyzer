@@ -3,9 +3,16 @@
     "allow": [
       "Bash(./datadog-service-analyzer.sh:*)",
       "Bash(./service-team-mapper.sh:*)",
+      "Bash(bash datadog-service-analyzer.sh)",
       "Bash(just claude_review *)",
       "Bash(markdownlint-cli2:*)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "WebFetch(domain:api.datadoghq.com)",
+      "WebFetch(domain:datadoghq.dev)",
+      "WebFetch(domain:developer.datadoghq.com)",
+      "WebFetch(domain:docs.datadoghq.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

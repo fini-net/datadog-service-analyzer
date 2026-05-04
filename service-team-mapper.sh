@@ -73,6 +73,9 @@ check_dependencies() {
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         log_error "Missing required dependencies:"
         printf '  - %s\n' "${missing_deps[@]}" >&2
+        if [[ "$need_op" == "true" ]]; then
+            log_info "Alternatively, set DD_API_KEY and DD_APP_KEY environment variables to skip 1Password"
+        fi
         exit 1
     fi
 }
