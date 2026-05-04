@@ -181,7 +181,14 @@ get_service_team_mappings() {
             .attributes.schema as $schema |
             {
                 service: ($schema."dd-service" // $schema.info["dd-service"] // null),
-                team: ($schema."dd-team" // $schema.info["dd-team"] // null),
+                team: (
+                    $schema."dd-team" //
+                    $schema.info["dd-team"] //
+                    $schema.owner //
+                    ([$schema.contacts // [] | .[]? | select(.type == "slack" or .type == "email") | .name // .contact] | first) //
+                    ([$schema.tags // [] | .[]? | select(startswith("team:")) | sub("^team:"; "")] | first) //
+                    null
+                ),
                 org_unit: ([$schema.tags // [] | .[]? | select(startswith("org_unit:")) | sub("^org_unit:"; "")] | first // null),
                 description: ($schema.description // $schema.info.description // null),
                 links: ([$schema.links // [] | .[]? | {name: .name, url: .url}])
