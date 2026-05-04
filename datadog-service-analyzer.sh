@@ -293,7 +293,7 @@ get_service_catalog() {
             break
         fi
 
-        page_offset=$((page_offset + page_size))
+        page_offset=$((page_offset + 1))
         log_info "Fetched $page_offset catalog entries so far (${unique_now} unique services)..."
     done
 
