@@ -79,16 +79,26 @@ check_dependencies() {
 }
 
 get_credentials_from_env() {
+    { local restore_trace=false; [[ $- == *x* ]] && restore_trace=true; set +x; } 2>/dev/null
     if [[ -n "${DD_API_KEY:-}" && -n "${DD_APP_KEY:-}" ]]; then
+        if [[ "${DD_API_KEY}" == *"|"* || "${DD_APP_KEY}" == *"|"* ]]; then
+            log_error "DD_API_KEY and DD_APP_KEY must not contain '|'"
+            exit 1
+        fi
         local site="${DD_SITE:-datadoghq.com}"
         log_info "Using credentials from environment variables"
         echo "${DD_API_KEY}|${DD_APP_KEY}|${site}"
+        { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
         return 0
+    elif [[ -n "${DD_API_KEY:-}" || -n "${DD_APP_KEY:-}" ]]; then
+        log_warn "Only one of DD_API_KEY/DD_APP_KEY is set — both required to skip 1Password. Falling back to 1Password."
     fi
+    { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
     return 1
 }
 
 get_credentials_from_1password() {
+    { local restore_trace=false; [[ $- == *x* ]] && restore_trace=true; set +x; } 2>/dev/null
     local vault="${1:-datadog}"
     local item="${2:-datadog-api}"
 
@@ -116,6 +126,7 @@ get_credentials_from_1password() {
     site=$(op item get "$item" --vault "$vault" --field "site" 2>/dev/null || echo "datadoghq.com")
 
     echo "$api_key|$app_key|$site"
+    { [[ "$restore_trace" == "true" ]] && set -x; } 2>/dev/null
 }
 
 make_datadog_request() {
@@ -321,7 +332,9 @@ main() {
         credentials=$(get_credentials_from_1password "$op_vault" "$op_item")
     fi
 
+    { local _xt=false; [[ $- == *x* ]] && _xt=true; set +x; } 2>/dev/null
     IFS='|' read -r api_key app_key site <<< "$credentials"
+    { [[ "$_xt" == "true" ]] && set -x; } 2>/dev/null
     
     local telemetry_services
     telemetry_services=$(get_services_from_telemetry "$api_key" "$app_key" "$site" "$days")
