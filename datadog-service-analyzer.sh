@@ -350,19 +350,26 @@ EOF
             ;;
         table|*)
             echo
-            echo "=== Datadog Service Analyzer Results ==="
+            echo "# Datadog Service Analyzer Results"
             echo
-            echo "Services found in telemetry: $total_telemetry"
-            echo "Services in service catalog: $total_catalog"
-            echo "Services missing from catalog: $total_missing"
+            echo "## Summary"
+            echo
+            echo "| Metric | Count |"
+            echo "| --- | ---: |"
+            echo "| Services found in telemetry | $total_telemetry |"
+            echo "| Services in service catalog | $total_catalog |"
+            echo "| Services missing from catalog | $total_missing |"
             echo
             if [[ -n "$missing_services" ]]; then
-                echo "Missing services:"
+                echo "## Missing Services"
+                echo
                 while IFS= read -r service; do
-                    echo "  - $service"
+                    echo "- \`$service\`"
                 done <<< "$missing_services"
             else
-                echo "✅ All services found in telemetry are registered in the service catalog!"
+                echo "## Status"
+                echo
+                echo "All services found in telemetry are registered in the service catalog."
             fi
             echo
             ;;
