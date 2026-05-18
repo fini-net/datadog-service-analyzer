@@ -71,7 +71,7 @@ op signin
 ### Basic Usage
 
 ```bash
-# Run with default settings (last 7 days, table output)
+# Run with default settings (last 7 days, markdown output)
 ./datadog-service-analyzer.sh
 ```
 
@@ -83,7 +83,7 @@ op signin
 OPTIONS:
     -h, --help              Show help message
     -v, --verbose           Enable verbose output
-    -o, --output FORMAT     Output format (json|table|csv) [default: table]
+    -o, --output FORMAT     Output format (json|table|markdown|csv) [default: markdown]
     --op-vault VAULT       1Password vault name [default: datadog]
     --op-item ITEM         1Password item name [default: datadog-api]
     --days DAYS            Days of telemetry data to analyze [default: 7]
