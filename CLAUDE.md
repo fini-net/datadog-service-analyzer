@@ -23,7 +23,8 @@ Both scripts use 1Password CLI (`op`) for credential management and support mult
 ./service-team-mapper.sh
 
 # Common options for both scripts:
-# --output (json|table|csv)
+# --output (json|table|csv)        # service-team-mapper.sh
+# --output (json|table|markdown|csv)  # datadog-service-analyzer.sh
 # --verbose
 # --op-vault VAULT --op-item ITEM
 # --days DAYS (service analyzer only)

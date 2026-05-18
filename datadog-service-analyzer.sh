@@ -44,7 +44,7 @@ Analyzes Datadog telemetry to find services missing from service catalog.
 OPTIONS:
     -h, --help              Show this help message
     -v, --verbose           Enable verbose output
-    -o, --output FORMAT     Output format (json|table|csv) [default: table]
+    -o, --output FORMAT     Output format (json|table|markdown|csv) [default: markdown]
     --op-vault VAULT       1Password vault name [default: datadog]
     --op-item ITEM         1Password item name [default: datadog-api]
     --days DAYS            Days of telemetry data to analyze [default: 7]
@@ -57,6 +57,7 @@ ENVIRONMENT VARIABLES:
 EXAMPLES:
     $SCRIPT_NAME
     $SCRIPT_NAME --output json --days 14
+    $SCRIPT_NAME --output markdown > report.md
     $SCRIPT_NAME --op-vault production --op-item datadog-prod
     DD_API_KEY=xxx DD_APP_KEY=yyy $SCRIPT_NAME
 
@@ -348,7 +349,7 @@ EOF
                 echo "$service,missing_from_catalog"
             done <<< "$missing_services"
             ;;
-        table|*)
+        markdown|md)
             echo
             echo "# Datadog Service Analyzer Results"
             echo
@@ -369,7 +370,25 @@ EOF
             else
                 echo "## Status"
                 echo
-                echo "All services found in telemetry are registered in the service catalog."
+                echo ":white_check_mark: All services found in telemetry are registered in the service catalog."
+            fi
+            echo
+            ;;
+        table|*)
+            echo
+            echo "=== Datadog Service Analyzer Results ==="
+            echo
+            echo "Services found in telemetry: $total_telemetry"
+            echo "Services in service catalog: $total_catalog"
+            echo "Services missing from catalog: $total_missing"
+            echo
+            if [[ -n "$missing_services" ]]; then
+                echo "Missing services:"
+                while IFS= read -r service; do
+                    echo "  - $service"
+                done <<< "$missing_services"
+            else
+                echo "✅ All services found in telemetry are registered in the service catalog!"
             fi
             echo
             ;;
@@ -378,7 +397,7 @@ EOF
 
 main() {
     local verbose=false
-    local output_format="table"
+    local output_format="markdown"
     local op_vault="datadog"
     local op_item="datadog-api"
     local days=7
