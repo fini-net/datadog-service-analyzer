@@ -3,7 +3,7 @@
   "extends": [
     "config:recommended"
   ],
-  "schedule": ["after 5am on Monday", "after 5am on Tuesday", "after 5am on Wednesday", "after 5am on Thursday", "after 5am on Friday"],
+  "schedule": ["on weekdays"]
   "packageRules": [
     {
       "matchManagers": ["github-actions"],
