@@ -96,3 +96,10 @@
 .gitattributes export-ignore
 .gitignore     export-ignore
 .gitkeep       export-ignore
+
+#
+# Template-synced just boilerplate - excluded from GitHub language stats
+# (tracks the FINI template repo via .just/CHECKSUMS.json)
+#
+
+.just/** linguist-vendored
